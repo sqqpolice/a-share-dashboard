@@ -1,0 +1,44 @@
+# A-SHARE Sector Rotation Dashboard - Auto Data Update
+# Triggers every weekday at 16:30 Beijing time (08:30 UTC)
+# Also can be triggered manually from GitHub Actions UI
+
+name: Update A-Share Data
+
+on:
+  schedule:
+    # Weekdays (Mon-Fri) at 08:30 UTC = 16:30 Beijing
+    - cron: '30 8 * * 1-5'
+  workflow_dispatch:  # Manual trigger from GitHub UI
+
+jobs:
+  fetch-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch real-time A-share data
+        run: python fetch_a股.py
+        continue-on-error: true  # Don't fail if API temporarily down
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.json data.js
+          # Only commit if there are actual changes
+          git diff --cached --quiet || git commit -m "data: auto-update $(date +'%Y-%m-%d %H:%M' TZ='Asia/Shanghai')"
+          git push

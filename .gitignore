@@ -1,0 +1,23 @@
+# OS / Editor
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env/
+venv/
+
+# Test artifacts
+_test_*.py
+
+# Local run artifacts (auto-generated, don't commit)
+data.js
+
+# Keep data.json - this IS the deployable data
+# !data.json

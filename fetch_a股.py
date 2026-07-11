@@ -1,0 +1,351 @@
+# -*- coding: utf-8 -*-
+"""
+A股行业轮动与资金流向监控 · 后端数据抓取脚本
+================================================
+用途：每天定时运行（或手动运行），从公开接口抓取真实行情，
+      计算 MA20 / MACD，产出 data.js（离线双击用）与 data.json（网站模式用）。
+
+数据来源（均经实测可返回真实数据）：
+  - 指数实时涨跌      : 腾讯财经 qt.gtimg.cn
+  - 行业/概念板块涨跌+主力净流入 : 东方财富 push2.eastmoney.com
+  - 板块 60 日 K 线    : 东方财富 push2his.eastmoney.com
+  - 北向资金          : 东方财富 kamt（2024/8 起仅披露月度累计，当日净买入不实时）
+
+运行：
+  python fetch_a股.py            # 在线抓取（需联网）
+  python fetch_a股.py --demo     # 离线模式（用内置真实快照验证管线，不联网）
+  python fetch_a股.py --serve    # 抓取后顺带起一个本地 http 服务（http://localhost:8000）
+
+依赖：requests（pip install requests）。如缺失会给出提示。
+北向当日净买入：监管 2024/8 起不再实时披露，脚本只会拿到月度累计，并标注 dayDisclosed=false。
+"""
+import os, sys, json, re, datetime, random
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# ---------------------------------------------------------------------------
+# 内置真实快照（2026-07-10 收盘，来自腾讯/东方财富公开接口实测）
+# 作用：① 离线兜底 ② --demo 验证逻辑。在线抓取成功时会被真实数据整体覆盖。
+# ---------------------------------------------------------------------------
+SNAP = {
+  "date": "2026-07-11",
+  "asOf": "2026-07-10 收盘",
+  "indices": [
+    {"code": "sh000001", "name": "上证指数", "value": 3996.16, "chg": -1.00},
+    {"code": "sz399001", "name": "深证成指", "value": 15046.67, "chg": -2.29},
+    {"code": "sz399006", "name": "创业板指", "value": 3842.73, "chg": -4.37},
+    {"code": "sh000300", "name": "沪深300", "value": 4780.79, "chg": -1.96},
+    {"code": "sh000688", "name": "科创50",  "value": 2064.98, "chg": -5.53},
+    {"code": "bj899050", "name": "北证50",  "value": 1209.15, "chg": -0.02},
+  ],
+  "sectors": [
+    {"name": "电子",       "bk": "BK1201", "chg": -3.13, "inflow": -435.13},
+    {"name": "半导体",     "bk": "BK1036", "chg": -5.38, "inflow": -248.78},
+    {"name": "通信设备",   "bk": "BK0448", "chg":  0.13, "inflow":  -70.13},
+    {"name": "国防军工",   "bk": "BK1204", "chg":  3.43, "inflow":   77.53},
+    {"name": "医药生物",   "bk": "BK1216", "chg":  2.82, "inflow":   40.79},
+    {"name": "白酒",       "bk": "BK1277", "chg":  3.64, "inflow":   13.16},
+    {"name": "有色金属",   "bk": "BK0478", "chg":  0.17, "inflow":    7.21},
+    {"name": "基础化工",   "bk": "BK1206", "chg":  0.06, "inflow":  -37.12},
+    {"name": "乘用车",     "bk": "BK1262", "chg":  2.44, "inflow":   11.10},
+    {"name": "房地产开发", "bk": "BK0451", "chg":  2.32, "inflow":    0.92},
+    {"name": "农林牧渔",   "bk": "BK0433", "chg":  2.38, "inflow":    5.38},
+    {"name": "电池",       "bk": "BK1033", "chg": -1.52, "inflow":  -66.57},
+    {"name": "光伏主材",   "bk": "BK1318", "chg":  2.40, "inflow":    1.49},
+    {"name": "证券",       "bk": "BK0473", "chg": -1.88, "inflow":  -24.15},
+    {"name": "化学制药",   "bk": "BK0465", "chg":  3.22, "inflow":   16.31},
+    {"name": "煤炭开采",   "bk": "BK1250", "chg": -0.11, "inflow":   -1.03},
+  ],
+  "themes": [
+    {"name": "国防军工 +3.43%", "hot": 9.5},
+    {"name": "商业航天 +2.70%", "hot": 9.1},
+    {"name": "医药/CRO",        "hot": 8.4},
+    {"name": "白酒 +3.64%",     "hot": 8.0},
+    {"name": "光伏 +2.40%",     "hot": 7.3},
+    {"name": "半导体 -5.38%",   "hot": 6.0},
+  ],
+  "north": {"monthNet": 520.0, "dayDisclosed": False},
+  "detailTabs": [
+    {"name": "半导体",   "bk": "BK1036"},
+    {"name": "光伏",     "bk": "BK1318"},
+    {"name": "商业航天", "nameMatch": "商业航天"},
+    {"name": "新能源车", "nameMatch": "新能源车"},
+    {"name": "人工智能", "nameMatch": "人工智能"},
+    {"name": "国防军工", "bk": "BK1204"},
+    {"name": "电子",     "bk": "BK1201"},
+    {"name": "白酒",     "bk": "BK1277"},
+    {"name": "医药",     "bk": "BK1216"},
+    {"name": "银行",     "nameMatch": "银行"},
+    {"name": "煤炭",     "bk": "BK1250"},
+    {"name": "电力设备", "bk": "BK1033"},
+  ],
+  "alloc": [
+    {"title": "国防军工 / 商业航天（事件催化 + 资金共振）", "rating": "超配",
+     "body": "国防军工当日 +3.43%、主力净流入 77.5 亿居行业首位；商业航天概念资金活跃，卫星互联网、航天装备全线爆发。下半年密集发射窗口与卫星互联网政策支撑，趋势动能强。",
+     "tags": ["军工+3.43%", "事件催化密集", "资金共振"]},
+    {"title": "医药生物（政策 + 估值修复）", "rating": "标配",
+     "body": "医药生物 +2.82%、化学制药 +3.22%；新版国家基本药物目录实施预期纳入创新药，CRO/医疗服务活跃。但短线涨幅已大，建议控仓、逢回调布局。",
+     "tags": ["医药+2.82%", "基药目录催化", "涨幅偏大控仓"]},
+    {"title": "半导体 / 电子（高位退潮）", "rating": "低配",
+     "body": "电子 -3.13%、半导体 -5.38%，主力净流出逾 400 亿，AI 硬件与存储芯片集体重挫。在出现明确止跌信号前维持低配，等待企稳。",
+     "tags": ["半导体-5.38%", "主力流出400亿+", "等待止跌"]},
+  ],
+}
+
+IDX_CODES = [x["code"] for x in SNAP["indices"]]
+
+
+# ----------------------------- 网络层 -----------------------------
+def _session():
+    import requests
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://quote.eastmoney.com/",
+    })
+    return s
+
+
+def em_list(fs, pz=500, fields="f12,f14,f3,f62"):
+    """东方财富板块列表（行业 t:2 / 概念 t:3）。返回 [{code,name,chg,inflow}]"""
+    s = _session()
+    url = "https://push2.eastmoney.com/api/qt/clist/get"
+    r = s.get(url, params={
+        "pn": 1, "pz": pz, "po": 1, "np": 1, "fltt": 2, "invt": 2,
+        "fid": "f3", "fs": fs, "fields": fields,
+    }, timeout=12)
+    m = re.search(r"\((.*)\)", r.text, re.S)
+    d = json.loads(m.group(1))
+    out = []
+    for it in (d.get("data") or {}).get("diff", {}).values():
+        out.append({
+            "code": it.get("f12"), "name": it.get("f14"),
+            "chg": float(it.get("f3") or 0),
+            "inflow": round((it.get("f62") or 0) / 1e8, 2),  # 元->亿元
+        })
+    return out
+
+
+def tencent_indices(codes):
+    """腾讯指数实时。返回 [{code,name,value,chg,time}]"""
+    s = _session()
+    r = s.get("https://qt.gtimg.cn/q=" + ",".join(codes),
+              headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"},
+              timeout=12)
+    raw = r.content.decode("gbk", "ignore")
+    out = []
+    for line in raw.split(";"):
+        line = line.strip()
+        if not line.startswith("v_") or "=" not in line:
+            continue
+        code = line[2:line.index("=")]          # 变量名 v_xxxx 中的代码
+        payload = line.split("=", 1)[1].strip().strip('"')
+        a = payload.split("~")
+        if len(a) < 34:
+            continue
+        try:
+            price = float(a[3]); prev = float(a[4])
+            chg = round((price / prev - 1) * 100, 2) if prev else 0.0
+        except Exception:
+            continue
+        tm = a[31] if len(a) > 31 and a[31].isdigit() else ""
+        out.append({"code": code, "name": a[1], "value": price, "chg": chg, "time": tm})
+    return out
+
+
+def em_kline(secid, lmt=60):
+    """板块 60 日 K 线收盘价。secid 形如 90.BK1036"""
+    s = _session()
+    url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    r = s.get(url, params={
+        "secid": secid, "fields1": "f1,f2,f3", "fields2": "f51,f53",
+        "klt": 101, "fqt": 0, "end": "20500101", "lmt": lmt,
+    }, timeout=12)
+    m = re.search(r"\((.*)\)", r.text, re.S)
+    d = json.loads(m.group(1))
+    kl = (d.get("data") or {}).get("klines") or []
+    return [float(k.split(",")[1]) for k in kl]
+
+
+def em_north():
+    """北向资金。返回 {monthNet, dayDisclosed}"""
+    s = _session()
+    url = "https://push2.eastmoney.com/api/qt/kamt/get"
+    r = s.get(url, params={
+        "fields1": "f1,f3",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
+        "ut": "b2884a393a59ad64002292a3e90d46a5",
+    }, timeout=12)
+    m = re.search(r"\((.*)\)", r.text, re.S)
+    d = json.loads(m.group(1))
+    hk = (d.get("data") or {}).get("hk2sh") or {}
+    day = float(hk.get("dayNetAmtIn") or 0)
+    month = float(hk.get("monthNetAmtIn") or 0)
+    return {"monthNet": round(month / 1e8, 1), "dayDisclosed": day != 0}  # 元 -> 亿元
+
+
+# ----------------------------- 指标计算 -----------------------------
+def ema(arr, n):
+    k = 2 / (n + 1)
+    out = [arr[0]]
+    for i in range(1, len(arr)):
+        out.append(arr[i] * k + out[-1] * (1 - k))
+    return out
+
+
+def macd(close, fast=12, slow=26, sig=9):
+    eF, eS = ema(close, fast), ema(close, slow)
+    dif = [eF[i] - eS[i] for i in range(len(close))]
+    dea = ema(dif, sig)
+    hist = [(dif[i] - dea[i]) * 2 for i in range(len(close))]
+    return {"dif": [round(x, 3) for x in dif],
+            "dea": [round(x, 3) for x in dea],
+            "hist": [round(x, 3) for x in hist]}
+
+
+def ma20(close):
+    out = []
+    for i in range(len(close)):
+        out.append(round(sum(close[max(0, i - 19):i + 1]) / min(i + 1, 20), 2))
+    return out
+
+
+# ----------------------------- 合成数据 -----------------------------
+def _synthetic_close(seed_name, end_chg, n=60, end=1000.0):
+    """离线模式用：生成一条以 end_chg 为终点涨跌幅的确定性序列，仅用于验证管线。"""
+    rnd = random.Random(abs(hash(seed_name)) % (2 ** 32))
+    drift = (end_chg / 100.0) * 0.22
+    p = end / (1 + drift)
+    out = []
+    for i in range(n):
+        p = p * (1 + (rnd.random() - 0.5) * 0.03 + drift / n)
+        out.append(round(p, 2))
+    return out
+
+
+def build_data(online=True):
+    today = datetime.date.today()
+    data = {
+        "date": today.strftime("%Y-%m-%d"),
+        "asOf": today.strftime("%Y-%m-%d") + " 实时" if online else SNAP["asOf"],
+        "indices": SNAP["indices"], "sectors": SNAP["sectors"],
+        "themes": SNAP["themes"], "north": dict(SNAP["north"]),
+        "detailTabs": [dict(t) for t in SNAP["detailTabs"]],
+        "alloc": SNAP["alloc"],
+        "source": "online" if online else "demo/offline",
+    }
+
+    if not online:
+        # 离线：用内置快照 + 合成 K 线验证 MACD 计算
+        by_name = {s["name"]: s for s in SNAP["sectors"]}
+        for t in data["detailTabs"]:
+            nm = t.get("nameMatch") or t["name"]
+            chg = (by_name.get(nm) or {}).get("chg", 0)
+            close = _synthetic_close(nm, chg)
+            t["series"] = {"close": close, "ma20": ma20(close), "macd": macd(close)}
+        return data
+
+    # ---- 在线 ----
+    # 1) 指数
+    try:
+        idx = tencent_indices(IDX_CODES)
+        if idx:
+            data["indices"] = idx
+    except Exception as e:
+        print("  [warn] 指数抓取失败，沿用快照：", e)
+
+    # 2) 行业 + 概念板块
+    live_by_code = {}
+    name_to_code = {}
+    try:
+        boards = em_list("m:90+t:2", 500) + em_list("m:90+t:3", 500)
+        for b in boards:
+            live_by_code[b["code"]] = b
+            name_to_code[b["name"]] = b["code"]
+    except Exception as e:
+        print("  [warn] 板块抓取失败，沿用快照：", e)
+
+    # 用真实板块数据刷新 16 个行业
+    new_sectors = []
+    for s in SNAP["sectors"]:
+        rec = dict(s)
+        live = live_by_code.get(s["bk"])
+        if live:
+            rec["chg"] = live["chg"]
+            rec["inflow"] = live["inflow"]
+        new_sectors.append(rec)
+    data["sectors"] = new_sectors
+
+    # 3) 资金主线（取真实板块中涨跌幅+净流入综合靠前的 6 个）
+    try:
+        scored = []
+        for b in (em_list("m:90+t:2", 500) + em_list("m:90+t:3", 500)):
+            score = abs(b["chg"]) + (max(0, b["inflow"]) * 0.05)
+            scored.append((score, b))
+        scored.sort(key=lambda x: -x[0])
+        data["themes"] = [{"name": f"{b['name']} {('+' if b['chg']>=0 else '')}{b['chg']:.2f}%",
+                           "hot": round(min(9.9, 5 + score * 0.4), 1)}
+                          for score, b in scored[:6]]
+    except Exception as e:
+        print("  [warn] 资金主线合成失败，沿用快照：", e)
+
+    # 4) 各板块 K 线 + MACD（服务端算好，离线也能看真实 MACD）
+    for t in data["detailTabs"]:
+        bk = t.get("bk")
+        nm = t.get("nameMatch") or t["name"]
+        if not bk and nm in name_to_code:
+            bk = name_to_code[nm]
+        if bk:
+            t["bk"] = bk  # 回填解析到的代码，便于前端实时刷新
+            try:
+                close = em_kline("90." + bk, 60)
+                if close and len(close) >= 26:
+                    t["series"] = {"close": close, "ma20": ma20(close), "macd": macd(close)}
+            except Exception as e:
+                print(f"  [warn] K线抓取失败 {nm}({bk})：", e)
+
+    # 5) 北向
+    try:
+        data["north"] = em_north()
+    except Exception as e:
+        print("  [warn] 北向抓取失败，沿用快照：", e)
+
+    return data
+
+
+def write_outputs(data):
+    js = "window.BACKEND_DATA = " + json.dumps(data, ensure_ascii=False) + ";\n"
+    with open(os.path.join(HERE, "data.js"), "w", encoding="utf-8") as f:
+        f.write(js)
+    with open(os.path.join(HERE, "data.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    print(f"  [ok] 已生成 data.js / data.json（来源={data['source']}，板块={len(data['sectors'])}，K线板块={sum(1 for t in data['detailTabs'] if t.get('series'))}）")
+
+
+def main():
+    args = sys.argv[1:]
+    online = "--demo" not in args
+    if "--demo" in args:
+        print("== 离线模式（验证管线，不联网）==")
+    else:
+        print("== 在线抓取真实行情 ==")
+    try:
+        import requests  # noqa
+    except ImportError:
+        print("缺少依赖 requests，请先运行：pip install requests")
+        sys.exit(1)
+
+    data = build_data(online=online)
+    write_outputs(data)
+
+    if "--serve" in args:
+        import http.server, socketserver
+        os.chdir(HERE)
+        port = 8000
+        with socketserver.TCPServer(("", port), http.server.SimpleHTTPRequestHandler) as httpd:
+            print(f"本地服务已启动：http://localhost:{port}/sector-dashboard-live.html  （Ctrl+C 停止）")
+            httpd.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
