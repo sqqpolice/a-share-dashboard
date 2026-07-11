@@ -225,6 +225,7 @@ def _synthetic_close(seed_name, end_chg, n=60, end=1000.0):
 
 def build_data(online=True):
     today = datetime.date.today()
+    fetched = False  # 是否真正抓到了板块实时数据（用于诚实标注 source）
     data = {
         "date": today.strftime("%Y-%m-%d"),
         "asOf": today.strftime("%Y-%m-%d") + " 实时" if online else SNAP["asOf"],
@@ -232,7 +233,7 @@ def build_data(online=True):
         "themes": SNAP["themes"], "north": dict(SNAP["north"]),
         "detailTabs": [dict(t) for t in SNAP["detailTabs"]],
         "alloc": SNAP["alloc"],
-        "source": "online" if online else "demo/offline",
+        "source": "demo/offline" if not online else "online-attempt",
     }
 
     if not online:
@@ -259,6 +260,8 @@ def build_data(online=True):
     name_to_code = {}
     try:
         boards = em_list("m:90+t:2", 500) + em_list("m:90+t:3", 500)
+        if boards:
+            fetched = True  # 真正拿到板块数据才算"在线成功"
         for b in boards:
             live_by_code[b["code"]] = b
             name_to_code[b["name"]] = b["code"]
@@ -310,6 +313,8 @@ def build_data(online=True):
     except Exception as e:
         print("  [warn] 北向抓取失败，沿用快照：", e)
 
+    # 诚实标注：是否真正抓到了实时板块数据
+    data["source"] = "online" if fetched else "online-fallback"
     return data
 
 
