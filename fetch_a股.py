@@ -313,6 +313,41 @@ def build_data(online=True):
     return data
 
 
+def update_history(data):
+    """累积写入 history.json：每个板块/主题每日一个点，供前端历史趋势面板使用。
+    在 GitHub Actions 中，history.json 随仓库提交而跨次运行保留，自然累积成趋势。"""
+    hist_path = os.path.join(HERE, "history.json")
+    try:
+        with open(hist_path, encoding="utf-8") as f:
+            hist = json.load(f)
+    except Exception:
+        hist = {"updated": "", "points": {}}
+    pts = hist.get("points", {})
+    today = data["date"]
+
+    # 16 行业：记录涨跌幅 + 主力净流入
+    for s in data["sectors"]:
+        lst = pts.setdefault(s["name"], [])
+        if not lst or lst[-1].get("d") != today:
+            lst.append({"d": today, "chg": s["chg"], "in": s["inflow"]})
+
+    # 重点板块（带 K 线）：记录收盘价 + 当日涨跌幅
+    for t in data["detailTabs"]:
+        if not t.get("series"):
+            continue
+        c = t["series"]["close"]
+        chg = round((c[-1] / c[-2] - 1) * 100, 2) if len(c) >= 2 else 0
+        lst = pts.setdefault(t["name"], [])
+        if not lst or lst[-1].get("d") != today:
+            lst.append({"d": today, "c": c[-1], "chg": chg})
+
+    hist["updated"] = today
+    hist["points"] = pts
+    with open(hist_path, "w", encoding="utf-8") as f:
+        json.dump(hist, f, ensure_ascii=False, indent=1)
+    print(f"  [ok] 已更新 history.json（{len(pts)} 个板块时序）")
+
+
 def write_outputs(data):
     js = "window.BACKEND_DATA = " + json.dumps(data, ensure_ascii=False) + ";\n"
     with open(os.path.join(HERE, "data.js"), "w", encoding="utf-8") as f:
@@ -320,6 +355,7 @@ def write_outputs(data):
     with open(os.path.join(HERE, "data.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
     print(f"  [ok] 已生成 data.js / data.json（来源={data['source']}，板块={len(data['sectors'])}，K线板块={sum(1 for t in data['detailTabs'] if t.get('series'))}）")
+    update_history(data)
 
 
 def main():
@@ -343,7 +379,7 @@ def main():
         os.chdir(HERE)
         port = 8000
         with socketserver.TCPServer(("", port), http.server.SimpleHTTPRequestHandler) as httpd:
-            print(f"本地服务已启动：http://localhost:{port}/sector-dashboard-live.html  （Ctrl+C 停止）")
+            print(f"本地服务已启动：http://localhost:{port}/index.html  （Ctrl+C 停止）")
             httpd.serve_forever()
 
 

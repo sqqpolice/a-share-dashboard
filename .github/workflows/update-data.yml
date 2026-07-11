@@ -1,26 +1,29 @@
-# A-SHARE Sector Rotation Dashboard - Auto Data Update
-# Triggers every weekday at 16:30 Beijing time (08:30 UTC)
-# Also can be triggered manually from GitHub Actions UI
+# A股行业轮动与资金流向监控 · 自动化抓取 + 部署
+# 每个交易日 16:30（北京时间 = 08:30 UTC）自动：
+#   1) 抓取真实行情（腾讯指数 + 东方财富板块/概念/K线/北向），服务端算 MA20/MACD
+#   2) 提交 data.json（当日快照）+ history.json（跨日累积趋势）到仓库
+#   3) 将 index.html + 数据文件部署到 CloudBase 静态托管（站点即更新）
+# 支持手动触发（workflow_dispatch）。
+# 部署需要仓库 Secrets：CLOUDBASE_SECRET_ID / CLOUDBASE_SECRET_KEY / CLOUDBASE_ENV_ID
+# （在 CloudBase 控制台「用户中心 → 访问密钥」生成；ENV_ID = stock711-d9g478sq2cb9ff1b5）
+# 未配置密钥时，仅提交数据（可用于 jsDelivr 兜底，见 index.html 的 CDN_BASE）。
 
-name: Update A-Share Data
+name: Update A-Share Data & Deploy
 
 on:
   schedule:
-    # Weekdays (Mon-Fri) at 08:30 UTC = 16:30 Beijing
+    # 周一至周五 08:30 UTC = 北京时间 16:30（收盘后）
     - cron: '30 8 * * 1-5'
-  workflow_dispatch:  # Manual trigger from GitHub UI
+  workflow_dispatch:  # 手动触发
 
 jobs:
-  fetch-and-update:
+  update-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -32,13 +35,27 @@ jobs:
 
       - name: Fetch real-time A-share data
         run: python fetch_a股.py
-        continue-on-error: true  # Don't fail if API temporarily down
+        continue-on-error: true  # API 临时不可用时跳过，不阻断部署
 
       - name: Commit and push updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data.json data.js
-          # Only commit if there are actual changes
-          git diff --cached --quiet || git commit -m "data: auto-update $(date +'%Y-%m-%d %H:%M' TZ='Asia/Shanghai')"
+          git add data.json history.json
+          # 仅在有实际变更时才提交（避免无数据时空提交）
+          git diff --cached --quiet || git commit -m "data: auto-update $(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M')"
           git push
+
+      - name: Stage deployable files
+        run: |
+          mkdir -p dist
+          cp index.html data.json history.json data.js dist/
+
+      - name: Deploy to CloudBase static hosting
+        if: ${{ secrets.CLOUDBASE_SECRET_ID != '' }}
+        uses: TencentCloudBase/cloudbase-action@v2
+        with:
+          secretId:  ${{ secrets.CLOUDBASE_SECRET_ID }}
+          secretKey: ${{ secrets.CLOUDBASE_SECRET_KEY }}
+          envId:     ${{ secrets.CLOUDBASE_ENV_ID }}
+          staticSrcPath: dist

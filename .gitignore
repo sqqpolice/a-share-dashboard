@@ -21,3 +21,6 @@ data.js
 
 # Keep data.json - this IS the deployable data
 # !data.json
+
+# Agent / local workspace memory (never push to a public repo)
+.workbuddy/
