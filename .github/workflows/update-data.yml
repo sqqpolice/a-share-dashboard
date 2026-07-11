@@ -52,7 +52,7 @@ jobs:
           cp index.html data.json history.json data.js dist/
 
       - name: Deploy to CloudBase static hosting
-        if: ${{ secrets.CLOUDBASE_SECRET_ID != '' }}
+        continue-on-error: true   # 密钥未配置时跳过部署（数据已提交到仓库）
         uses: TencentCloudBase/cloudbase-action@v2
         with:
           secretId:  ${{ secrets.CLOUDBASE_SECRET_ID }}
