@@ -44,7 +44,9 @@ jobs:
           git add data.json history.json
           # 仅在有实际变更时才提交（避免无数据时空提交）
           git diff --cached --quiet || git commit -m "data: auto-update $(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M')"
-          git push
+          # 先拉远程最新再推送（防止被拒：远程有其他提交时自动 rebase）
+          git pull --rebase origin main || true
+          git push || git push --force-with-lease
 
       - name: Stage deployable files
         run: |
