@@ -442,6 +442,7 @@ def update_history(data, flow):
     with open(hist_path, "w", encoding="utf-8") as f:
         json.dump(hist, f, ensure_ascii=False, indent=1)
     print(f"  [ok] 已更新 history.json（{len(pts)} 个板块时序，每板块 {days} 个交易日）")
+    return hist
 
 
 def write_outputs(data):
@@ -452,7 +453,31 @@ def write_outputs(data):
     with open(os.path.join(HERE, "data.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
     print(f"  [ok] 已生成 data.js / data.json（来源={data['source']}，板块={len(data['sectors'])}，K线板块={sum(1 for t in data['detailTabs'] if t.get('series'))}）")
-    update_history(data, flow)
+    hist = update_history(data, flow)
+    inject_inline(data, hist)
+
+
+def inject_inline(data, history):
+    """把数据内联进 index.html，使页面在 file:// 本地预览或 fetch 失败(fetch 被浏览器拦截)时
+    仍能直接显示数据，不依赖外部 data.json / history.json 的 fetch。
+    CI 部署时前端仍优先 fetch 当日新鲜文件，仅在 fetch 不可用时回退到内联数据。"""
+    html_path = os.path.join(HERE, "index.html")
+    if not os.path.exists(html_path):
+        return
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
+    block = ("<!--INLINE_DATA_START-->\n"
+             "<script>window.BACKEND_DATA=" + json.dumps(data, ensure_ascii=False) +
+             ";window.HISTORY_DATA=" + json.dumps(history, ensure_ascii=False) + ";</script>\n"
+             "<!--INLINE_DATA_END-->")
+    if "<!--INLINE_DATA_START-->" in html:
+        html = re.sub(r"<!--INLINE_DATA_START-->.*?<!--INLINE_DATA_END-->",
+                      lambda m: block, html, flags=re.S)
+    else:
+        html = re.sub(r"<body[^>]*>", lambda m: m.group(0) + "\n" + block, html, count=1)
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print("  [ok] 已内联数据到 index.html（本地预览/fetch失败时也能显示）")
 
 
 def main():
