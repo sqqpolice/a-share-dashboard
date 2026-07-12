@@ -55,10 +55,10 @@ SNAP = {
     {"name": "房地产开发", "bk": "BK0451", "chg":  2.32, "inflow":    0.92},
     {"name": "农林牧渔",   "bk": "BK0433", "chg":  2.38, "inflow":    5.38},
     {"name": "电池",       "bk": "BK1033", "chg": -1.52, "inflow":  -66.57},
-    {"name": "光伏主材",   "bk": "BK1318", "chg":  2.40, "inflow":    1.49},
+    {"name": "光伏",       "bk": "BK1035", "chg":  2.40, "inflow":    1.49},
     {"name": "证券",       "bk": "BK0473", "chg": -1.88, "inflow":  -24.15},
-    {"name": "化学制药",   "bk": "BK0465", "chg":  3.22, "inflow":   16.31},
-    {"name": "煤炭开采",   "bk": "BK1250", "chg": -0.11, "inflow":   -1.03},
+    {"name": "化学制药",   "bk": "BK0075", "chg":  3.22, "inflow":   16.31},
+    {"name": "煤炭",       "bk": "BK0437", "chg": -0.11, "inflow":   -1.03},
   ],
   "themes": [
     {"name": "国防军工 +3.43%", "hot": 9.5},
@@ -70,7 +70,7 @@ SNAP = {
   ],
   "detailTabs": [
     {"name": "半导体",   "bk": "BK1036"},
-    {"name": "光伏",     "bk": "BK1318"},
+    {"name": "光伏",     "bk": "BK1035"},
     {"name": "商业航天", "nameMatch": "商业航天"},
     {"name": "新能源车", "nameMatch": "新能源车"},
     {"name": "人工智能", "nameMatch": "人工智能"},
@@ -79,7 +79,7 @@ SNAP = {
     {"name": "白酒",     "bk": "BK1277"},
     {"name": "医药",     "bk": "BK1216"},
     {"name": "银行",     "nameMatch": "银行"},
-    {"name": "煤炭",     "bk": "BK1250"},
+    {"name": "煤炭",     "bk": "BK0437"},
     {"name": "电力设备", "bk": "BK1033"},
   ],
   "alloc": [
