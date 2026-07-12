@@ -5,11 +5,14 @@ A股行业轮动与资金流向监控 · 后端数据抓取脚本
 用途：每天定时运行（或手动运行），从公开接口抓取真实行情，
       计算 MA20 / MACD，产出 data.js（离线双击用）与 data.json（网站模式用）。
 
-数据来源（均经实测可返回真实数据）：
-  - 指数实时涨跌      : 腾讯财经 qt.gtimg.cn
-  - 行业/概念板块涨跌+主力净流入 : 东方财富 push2.eastmoney.com
-  - 板块 60 日 K 线    : 东方财富 push2his.eastmoney.com
+数据来源（基于实测可用性分级，见 data.meta 字段如实标注）：
+  - 指数实时涨跌      : 腾讯财经 qt.gtimg.cn            【稳定可用，CI/本地均真实】
+  - 指数历史日K(近60日): 腾讯财经 web.ifzq.gtimg.cn      【稳定可用，支撑"指数近一周"真实走势】
+  - 行业/概念板块涨跌+主力净流入 : 东方财富 push2.eastmoney.com 【CI 公网通常可用；公司内网/本机常被挡，失败则标 snapshot】
+  - 板块 60 日 K 线    : 东方财富 push2his.eastmoney.com 【同上，依赖东方财富】
   - 北向资金          : 东方财富 kamt（2024/8 起仅披露月度累计，当日净买入不实时）
+说明：免费行情源里，行业板块级的"涨跌幅+主力净流入"只有东方财富能稳定提供；腾讯不提供板块实时报价/板块K线。
+      因此架构上"指数=腾讯真实源"，"行业板块=东方财富(尽力，失败标注示例)"，前端用徽章如实区分。
 
 运行：
   python fetch_a股.py            # 在线抓取（需联网）
@@ -148,8 +151,25 @@ def tencent_indices(codes):
             chg = round((price / prev - 1) * 100, 2) if prev else 0.0
         except Exception:
             continue
-        tm = a[31] if len(a) > 31 and a[31].isdigit() else ""
+        tm = a[30] if len(a) > 30 and a[30].isdigit() else ""
         out.append({"code": code, "name": a[1], "value": price, "chg": chg, "time": tm})
+    return out
+
+
+def tencent_index_kline(code, n=60):
+    """腾讯指数历史日K（开/收/高/低/量）。返回 [{d:'YYYY-MM-DD', c:收盘}]。
+    用于前端"指数近 N 日真实走势"，腾讯该接口稳定可用。"""
+    s = _session()
+    r = s.get("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+              params={"param": f"{code},day,,,{n},qfq"}, timeout=12)
+    d = (r.json().get("data") or {}).get(code) or {}
+    kl = d.get("day") or d.get("qfqday") or []
+    out = []
+    for row in kl:
+        try:
+            out.append({"d": row[0], "c": float(row[2])})
+        except Exception:
+            pass
     return out
 
 
@@ -225,43 +245,74 @@ def _synthetic_close(seed_name, end_chg, n=60, end=1000.0):
 
 def build_data(online=True):
     today = datetime.date.today()
-    fetched = False  # 是否真正抓到了板块实时数据（用于诚实标注 source）
+    # meta：如实记录每个模块的数据来源，前端用徽章区分"真实/示例"
+    meta = {"indicesSource": "snapshot", "sectorsSource": "snapshot",
+            "klineSource": "snapshot", "northSource": "snapshot",
+            "generatedAt": today.strftime("%Y-%m-%d %H:%M")}
     data = {
         "date": today.strftime("%Y-%m-%d"),
-        "asOf": today.strftime("%Y-%m-%d") + " 实时" if online else SNAP["asOf"],
+        "asOf": today.strftime("%Y-%m-%d") + " 收盘" if online else SNAP["asOf"],
         "indices": SNAP["indices"], "sectors": SNAP["sectors"],
         "themes": SNAP["themes"], "north": dict(SNAP["north"]),
         "detailTabs": [dict(t) for t in SNAP["detailTabs"]],
         "alloc": SNAP["alloc"],
         "source": "demo/offline" if not online else "online-attempt",
+        "meta": meta,
+        "indexHistory": {},  # 指数近 60 日真实收盘（腾讯），支撑"指数近一周"
     }
 
+    # ---------------- 离线 / 演示模式 ----------------
     if not online:
-        # 离线：用内置快照 + 合成 K 线验证 MACD 计算
         by_name = {s["name"]: s for s in SNAP["sectors"]}
         for t in data["detailTabs"]:
             nm = t.get("nameMatch") or t["name"]
             chg = (by_name.get(nm) or {}).get("chg", 0)
             close = _synthetic_close(nm, chg)
             t["series"] = {"close": close, "ma20": ma20(close), "macd": macd(close)}
+        # 合成指数历史（仅用于本地验证逻辑，非真实）
+        for ix in data["indices"]:
+            rnd = random.Random(abs(hash(ix["code"])) % (2 ** 32))
+            p = ix["value"] * (1 - ix["chg"] / 100.0)
+            hist = []
+            for i in range(60):
+                d = (today - datetime.timedelta(days=i)).strftime("%Y-%m-%d")
+                p = p * (1 + (rnd.random() - 0.5) * 0.02 + (ix["chg"] / 100.0) / 60)
+                hist.append({"d": d, "c": round(p, 2)})
+            data["indexHistory"][ix["name"]] = hist
         return data
 
-    # ---- 在线 ----
-    # 1) 指数
+    # ---------------- 在线模式 ----------------
+    # 1) 指数：腾讯实时（稳定真实）
     try:
         idx = tencent_indices(IDX_CODES)
         if idx:
             data["indices"] = idx
+            meta["indicesSource"] = "tencent-live"
     except Exception as e:
         print("  [warn] 指数抓取失败，沿用快照：", e)
 
-    # 2) 行业 + 概念板块
+    # 2) 指数历史日K：腾讯（真实，立即可用 -> 指数近一周走势）
+    try:
+        ih = {}
+        for code in IDX_CODES:
+            kl = tencent_index_kline(code, 60)
+            if kl:
+                nm = next((x["name"] for x in data["indices"] if x["code"] == code), code)
+                ih[nm] = kl
+        if ih:
+            data["indexHistory"] = ih
+    except Exception as e:
+        print("  [warn] 指数历史K线失败：", e)
+
+    # 3) 行业 + 概念板块：东方财富（CI 公网通常可用，内网/本机常被挡）
     live_by_code = {}
     name_to_code = {}
+    sectors_ok = False
     try:
         boards = em_list("m:90+t:2", 500) + em_list("m:90+t:3", 500)
         if boards:
-            fetched = True  # 真正拿到板块数据才算"在线成功"
+            sectors_ok = True
+            meta["sectorsSource"] = "eastmoney-live"
         for b in boards:
             live_by_code[b["code"]] = b
             name_to_code[b["name"]] = b["code"]
@@ -279,7 +330,7 @@ def build_data(online=True):
         new_sectors.append(rec)
     data["sectors"] = new_sectors
 
-    # 3) 资金主线（取真实板块中涨跌幅+净流入综合靠前的 6 个）
+    # 4) 资金主线（取真实板块中涨跌幅+净流入综合靠前的 6 个）
     try:
         scored = []
         for b in (em_list("m:90+t:2", 500) + em_list("m:90+t:3", 500)):
@@ -292,7 +343,7 @@ def build_data(online=True):
     except Exception as e:
         print("  [warn] 资金主线合成失败，沿用快照：", e)
 
-    # 4) 各板块 K 线 + MACD（服务端算好，离线也能看真实 MACD）
+    # 5) 各板块 K 线 + MACD（依赖东方财富）
     for t in data["detailTabs"]:
         bk = t.get("bk")
         nm = t.get("nameMatch") or t["name"]
@@ -304,17 +355,19 @@ def build_data(online=True):
                 close = em_kline("90." + bk, 60)
                 if close and len(close) >= 26:
                     t["series"] = {"close": close, "ma20": ma20(close), "macd": macd(close)}
+                    meta["klineSource"] = "eastmoney-live"
             except Exception as e:
                 print(f"  [warn] K线抓取失败 {nm}({bk})：", e)
 
-    # 5) 北向
+    # 6) 北向
     try:
         data["north"] = em_north()
+        meta["northSource"] = "eastmoney-live"
     except Exception as e:
         print("  [warn] 北向抓取失败，沿用快照：", e)
 
-    # 诚实标注：是否真正抓到了实时板块数据
-    data["source"] = "online" if fetched else "online-fallback"
+    # 诚实标注：只要指数或板块任一项拿到真实数据，即视为 online
+    data["source"] = "online" if (meta["indicesSource"] == "tencent-live" or sectors_ok) else "online-fallback"
     return data
 
 

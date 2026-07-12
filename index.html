@@ -107,6 +107,20 @@
   footer{margin-top:18px;text-align:center;color:var(--muted);font-size:11px;line-height:1.7}
   footer .disc{color:var(--red-d,#c23048)} footer .disc{color:#c23048}
   a{color:var(--cyan)}
+  /* 数据源徽章 + 历史面板控件 */
+  .src-badge{font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--border2);margin-left:6px}
+  .src-badge.live{color:var(--green);border-color:rgba(30,199,125,.4);background:rgba(30,199,125,.08)}
+  .src-badge.demo{color:var(--gold);border-color:rgba(240,185,11,.4);background:rgba(240,185,11,.08)}
+  .status.live-idx{color:var(--cyan);border-color:rgba(45,212,255,.4)} .status.live-idx .dot{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+  .hist-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0 2px}
+  .seg{display:inline-flex;border:1px solid var(--border2);border-radius:7px;overflow:hidden}
+  .seg button{background:var(--panel2);color:var(--muted2);border:none;padding:5px 11px;font-size:11px;cursor:pointer;font-family:var(--sans)}
+  .seg button.active{background:rgba(45,212,255,.12);color:var(--cyan)}
+  .seg button+button{border-left:1px solid var(--border2)}
+  .hsel{background:var(--panel2);color:var(--text);border:1px solid var(--border2);border-radius:7px;padding:5px 8px;font-size:11px;font-family:var(--mono);max-width:160px}
+  .hist-banner{font-size:11px;color:var(--cyan);margin:6px 0 0}
+  .hist-banner b{font-family:var(--mono)}
+  .hist-banner .reset{cursor:pointer;color:var(--muted2);text-decoration:underline;margin-left:8px}
 </style>
 </head>
 <body>
@@ -125,7 +139,7 @@
 
 <div class="row">
   <div class="panel" style="flex:1 1 100%">
-    <h2>大盘概览与今日资金主线 <span class="tag" id="idxTag">真实数据</span></h2>
+    <h2>大盘概览与今日资金主线 <span class="tag" id="idxTag">真实数据</span><span class="src-badge" id="badgeIdx"></span></h2>
     <div class="indices" id="indices"></div>
     <div class="themes" id="themes"></div>
   </div>
@@ -133,9 +147,10 @@
 
 <div class="grid2">
   <div class="panel">
-    <h2>16 个行业板块涨跌热力网格 <span class="tag">涨红跌绿 · 深浅表强度</span></h2>
+    <h2>16 个行业板块涨跌热力网格 <span class="tag">涨红跌绿 · 深浅表强度</span><span class="src-badge" id="badgeSec"></span></h2>
     <div class="sub">点击任意行业，下方面板展示该板块价格趋势与 MACD（联网时取真实 K 线）。</div>
     <div class="heat" id="heat"></div>
+    <div class="hist-banner" id="histBanner"></div>
   </div>
   <div class="panel">
     <h2>风格轮动强弱 <span class="tag">大盘↔小盘 · 价值↔成长（板块合成）</span></h2>
@@ -146,12 +161,12 @@
 
 <div class="grid2">
   <div class="panel inflow">
-    <h2>主力资金行业净流入排行 <span class="tag">双向条形 · 亿元</span></h2>
+    <h2>主力资金行业净流入排行 <span class="tag">双向条形 · 亿元</span><span class="src-badge" id="badgeFlow"></span></h2>
     <div id="inflowChart"></div>
     <div class="leg"><span><i style="background:var(--red)"></i>主力净流入</span><span><i style="background:var(--green)"></i>主力净流出</span><span class="muted" id="inflowMeta"></span></div>
   </div>
   <div class="panel north">
-    <h2>北向资金动向 <span class="tag">东方财富</span></h2>
+    <h2>北向资金动向 <span class="tag">东方财富</span><span class="src-badge" id="badgeNorth"></span></h2>
     <div class="north-head"><span class="big" id="northToday"></span><span class="lbl" id="northLbl"></span></div>
     <div id="northChart"></div>
     <div class="note" id="northNote"></div>
@@ -160,7 +175,7 @@
 
 <div class="row">
   <div class="panel detail" style="flex:1 1 100%">
-    <h2>板块明细 · 价格趋势与 MACD <span class="tag">点击热力格或下方标签切换</span></h2>
+    <h2>板块明细 · 价格趋势与 MACD <span class="tag">点击热力格或下方标签切换</span><span class="src-badge" id="badgeKline"></span></h2>
     <div class="tabs" id="detailTabs"></div>
     <div class="kpi" id="detailKpi"></div>
     <div class="chart-title">价格走势（60日）与 MA20
@@ -182,8 +197,25 @@
 
 <div class="row">
   <div class="panel history" style="flex:1 1 100%">
-    <h2>板块历史趋势 <span class="tag" id="histTag">每日累积 · 来源 history.json</span></h2>
-    <div class="sub">展示所选板块自部署以来的每日走势。点击下方热力格或上方板块标签即可切换。</div>
+    <h2>板块历史趋势 <span class="tag" id="histTag">近7日 / 选择某天回看</span></h2>
+    <div class="sub">切换「行业板块 / 指数」数据源，选择指标与区间；在下拉框选某天，可回看<b>当天板块表现</b>（热力网格与资金流同步切换）。指数模式为腾讯真实近 60 日。</div>
+    <div class="hist-ctl">
+      <div class="seg" id="histSrcSeg">
+        <button data-v="sector" class="active">行业板块</button>
+        <button data-v="index">指数</button>
+      </div>
+      <div class="seg" id="histMetricSeg">
+        <button data-v="chg" class="active">涨跌幅%</button>
+        <button data-v="in">主力净流入</button>
+        <button data-v="c">收盘价</button>
+      </div>
+      <div class="seg" id="histRangeSeg">
+        <button data-v="7" class="active">近7日</button>
+        <button data-v="30">近30日</button>
+        <button data-v="0">全部</button>
+      </div>
+      <select id="histDate" class="hsel" title="选择某天回看"></select>
+    </div>
     <div class="chart-title">历史走势
       <span class="src" id="histSrc"></span>
     </div>
@@ -278,11 +310,12 @@ let REAL = (window.BACKEND_DATA && window.BACKEND_DATA.sectors) ? window.BACKEND
   ]
 };
 
-let STATUS={mode:"offline", live:false};
+let STATUS={mode:"offline", idxLive:false, secLive:false};
 let selectedSector = REAL.sectors[0].name;
 let selectedDetail = "半导体";
 let HISTORY = {points:{}};    // 历史趋势数据（来自 history.json，每日累积）
 let selectedHistory = selectedDetail;
+let histView = {src:"sector", metric:"chg", range:7, date:null};  // 历史面板视图状态
 const klineCache = {};
 
 /* ---------- 工具 ---------- */
@@ -353,9 +386,9 @@ async function refreshLive(){
   // 指数（腾讯实时）
   try{
     const idx=await loadTencent();
-    if(idx&&idx.length){REAL.indices=idx;STATUS.live=true;}
+    if(idx&&idx.length){REAL.indices=idx;STATUS.idxLive=true;}
   }catch(e){}
-  // 行业 + 概念板块（东方财富）
+  // 行业 + 概念板块（东方财富；公司内网/本机常被挡，失败时保持快照）
   try{
     const [ind,con]=await Promise.all([eastList('m:90+t:2',496),eastList('m:90+t:3',498)]);
     REAL._byCode={};REAL._byName={};
@@ -364,7 +397,7 @@ async function refreshLive(){
       REAL._byName[d.f14]={chg:d.f3,inflow:d.f62/1e8,code:d.f12};
     });
     REAL.sectors.forEach(s=>{const m=REAL._byCode[s.bk];if(m){s.chg=m.chg;s.inflow=+m.inflow.toFixed(2);}});
-    if(ind.length) STATUS.live=true;
+    if(ind.length) STATUS.secLive=true;
   }catch(e){}
   // 北向
   try{
@@ -372,16 +405,19 @@ async function refreshLive(){
     const hk=d.data&&d.data.hk2sh;
     if(hk){REAL.north.monthNet=+(hk.monthNetAmtIn/10000).toFixed(1);REAL.north.dayDisclosed=(hk.dayNetAmtIn||0)!==0;}
   }catch(e){}
-  renderIndices();renderHeat();renderInflow();renderStyles();renderNorth();renderDetail();
-  setStatus(STATUS.live?'live':'offline');
+  renderIndices();renderHeat();renderInflow();renderStyles();renderNorth();renderDetail();renderSourceBadges();
+  setStatus();
 }
 function setStatus(mode){
-  STATUS.mode=mode;
+  if(mode==='loading'){ STATUS.mode='loading'; }
+  else { STATUS.mode = STATUS.secLive ? 'live' : (STATUS.idxLive ? 'live-idx' : 'offline'); }
   const pill=$('statusPill'),txt=$('statusText');
-  pill.className='status '+mode;
-  txt.textContent = mode==='live'?'实时':mode==='loading'?'加载中…':'离线快照';
-  $('asofBadge').textContent = mode==='live' ? '实时行情' : (REAL.asOf || '真实收盘快照 2026-07-10');
-  $('idxTag').textContent = mode==='live' ? '实时' : '真实数据';
+  pill.className='status '+STATUS.mode;
+  const map={live:['实时','实时行情'],'live-idx':['指数实时','腾讯实时'],loading:['加载中…','加载中…'],offline:['离线快照', REAL.asOf||'真实收盘快照']};
+  const m=map[STATUS.mode];
+  txt.textContent=m[0];
+  $('asofBadge').textContent=m[1];
+  $('idxTag').textContent = STATUS.secLive?'实时':(STATUS.idxLive?'腾讯实时':'示例数据');
 }
 
 /* ---------- 渲染 ---------- */
@@ -397,8 +433,9 @@ function renderIndices(){
   $('dateLabel').textContent = REAL.date + (STATUS.mode==='live'?' · 实时':' · 收盘快照');
 }
 function renderHeat(){
-  const maxAbs=Math.max(...REAL.sectors.map(s=>Math.abs(s.chg)));
-  $('heat').innerHTML = REAL.sectors.map(s=>{
+  const secs=viewSectors();
+  const maxAbs=Math.max(...secs.map(s=>Math.abs(s.chg)),0.01);
+  $('heat').innerHTML = secs.map(s=>{
     const t=Math.min(Math.abs(s.chg)/maxAbs,1);
     const a=(0.18+0.72*t).toFixed(3);
     const bg=s.chg>=0?`rgba(246,70,93,${a})`:`rgba(30,199,125,${a})`;
@@ -406,11 +443,13 @@ function renderHeat(){
       <div class="cn">${s.name}</div><div class="cp">${sign(s.chg)}%</div><div class="ci">主力 ${sign(s.inflow)}亿</div></div>`;
   }).join("");
   document.querySelectorAll(".cell").forEach(c=>c.onclick=()=>{selectedSector=c.dataset.name;selectedHistory=c.dataset.name;renderHeat();renderHistory();});
+  renderHistBanner();
 }
 function renderInflow(){
-  const items=[...REAL.sectors].sort((a,b)=>b.inflow-a.inflow);
+  const secs=viewSectors();
+  const items=[...secs].sort((a,b)=>b.inflow-a.inflow);
   const W=640,padL=92,padR=12,top=6,rowH=(264-top)/items.length,center=(padL+W-padR)/2;
-  const maxAbs=Math.max(...items.map(s=>Math.abs(s.inflow)))*1.05;
+  const maxAbs=Math.max(...items.map(s=>Math.abs(s.inflow)),0.01)*1.05;
   const scale=(W-padL-padR)/2/maxAbs;let bars="";
   items.forEach((s,i)=>{
     const y=top+i*rowH,w=Math.abs(s.inflow)*scale,x=s.inflow>=0?center:center-w,col=s.inflow>=0?"var(--red)":"var(--green)";
@@ -421,7 +460,8 @@ function renderInflow(){
   });
   bars+=`<line x1="${center}" y1="${top-2}" x2="${center}" y2="262" stroke="#26354a" stroke-width="1"/>`;
   $('inflowChart').innerHTML=`<svg viewBox="0 0 ${W} 266">${bars}</svg>`;
-  $('inflowMeta').textContent = STATUS.mode==='live' ? '（实时）' : '（2026-07-10）';
+  const d=histView.date&&histView.date!==latestDate()?`（${histView.date} 回看）`:(STATUS.mode==='live'?'（实时）':'(示例数据)');
+  $('inflowMeta').textContent = d;
 }
 function getStyleData(){
   const avg=ns=>{const s=ns.map(n=>{const x=REAL.sectors.find(y=>y.name===n);return x?x.chg:0;});return s.reduce((a,b)=>a+b,0)/s.length;};
@@ -528,16 +568,83 @@ function macdSVG(m){
   return `<svg viewBox="0 0 ${W} ${H}">${grid}${bars}<path d="${difPath}" fill="none" stroke="var(--gold)" stroke-width="1.6"/><path d="${deaPath}" fill="none" stroke="var(--cyan)" stroke-width="1.6"/></svg>`;
 }
 /* ---------- 历史趋势 ---------- */
+/* ---------- 数据源徽章 ---------- */
+function metaSrc(k){ return (REAL.meta||{})[k] || 'snapshot'; }
+function badgeText(s){ return ({'tencent-live':'腾讯实时','eastmoney-live':'东方财富实时','snapshot':'示例数据'})[s] || '示例数据'; }
+function renderSourceBadges(){
+  const set=(id,src)=>{const el=$(id);if(!el)return;const live=!!(src&&src.endsWith('live'));el.className='src-badge '+(live?'live':'demo');el.textContent=badgeText(src);};
+  set('badgeIdx',metaSrc('indicesSource'));
+  set('badgeSec',metaSrc('sectorsSource'));
+  set('badgeFlow',metaSrc('sectorsSource'));
+  set('badgeNorth',metaSrc('northSource'));
+  set('badgeKline',metaSrc('klineSource'));
+}
+
+/* ---------- 历史/回看 视图 ---------- */
+function allDates(){
+  const s=new Set();
+  for(const k in HISTORY.points){ for(const p of HISTORY.points[k]) s.add(p.d); }
+  return [...s].sort().reverse();
+}
+function latestDate(){ const d=allDates(); return d[0]||''; }
+function sectorsOnDate(dateStr){
+  if(!dateStr) return null;
+  const map={};
+  for(const s of REAL.sectors){ const arr=HISTORY.points[s.name]||[]; const rec=arr.find(p=>p.d===dateStr); if(rec) map[s.name]={chg:rec.chg,in:rec.in}; }
+  return REAL.sectors.map(s=>{ const v=map[s.name]; return v?{...s,chg:v.chg,inflow:v.in}:s; });
+}
+function viewSectors(){
+  if(histView.src==='sector' && histView.date && histView.date!==latestDate()){
+    const vs=sectorsOnDate(histView.date); if(vs) return vs;
+  }
+  return REAL.sectors;
+}
+function renderHistBanner(){
+  const el=$('histBanner'); if(!el)return;
+  if(histView.src==='sector' && histView.date && histView.date!==latestDate()){
+    el.innerHTML=`正在回看 <b>${histView.date}</b> 的板块表现（热力网格与资金流已切换为该日）<span class="reset" id="histReset">返回最新</span>`;
+    const r=$('histReset'); if(r) r.onclick=()=>{ histView.date=latestDate(); fillHistDates(); renderHeat();renderInflow();renderHistory(); };
+  } else el.innerHTML='';
+}
+function fillHistDates(){
+  const sel=$('histDate'); if(!sel)return;
+  let dates = histView.src==='index'
+    ? ((REAL.indexHistory||{})[selectedHistory]||[]).map(p=>p.d)
+    : allDates();
+  dates=[...new Set(dates)].sort().reverse();
+  if(!dates.length){ sel.style.display='none'; histView.date=null; return; }
+  sel.style.display='';
+  const cur = (histView.date && dates.includes(histView.date)) ? histView.date : dates[0];
+  histView.date=cur;
+  sel.innerHTML=dates.map(d=>`<option value="${d}" ${d===cur?'selected':''}>${d}</option>`).join("");
+}
+function wireHistoryControls(){
+  const seg=(id,key,cast)=>{ const el=$(id); if(!el)return;
+    el.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      el.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      histView[key]=cast?cast(b.dataset.v):b.dataset.v;
+      if(key==='src'){ histView.date=null; fillHistDates(); }
+      renderHistory();
+    });
+  };
+  seg('histSrcSeg','src'); seg('histMetricSeg','metric'); seg('histRangeSeg','range',v=>+v);
+  $('histDate').onchange=()=>{ histView.date=$('histDate').value; renderHeat();renderInflow();renderHistory(); };
+}
+
 function historySVG(points, metric){
   if(!points || points.length < 2){
-    return '<div class="empty">历史数据不足：需累积多个交易日。GitHub Actions 每日收盘后自动抓取，运行数日后此处将显示真实趋势曲线。</div>';
+    return '<div class="empty">历史数据不足：行业板块需累积多个交易日（或切换为「指数」查看腾讯真实近 60 日走势）。</div>';
   }
-  const vals = points.map(p => metric==='c' ? (p.c!=null?p.c:p.chg) : p.chg);
+  const valOf = p => metric==='c' ? (p.c!=null?p.c:p.chg)
+                  : metric==='in' ? (p.in!=null?p.in:p.chg)
+                  : p.chg;
+  const vals = points.map(valOf);
   const W=720,H=240,padT=14,padB=26,padL=12,padR=12;
   const min=Math.min(...vals),max=Math.max(...vals),range=(max-min)||1;
   const X=i=>padL+i*(W-padL-padR)/(points.length-1);
   const Y=v=>padT+(1-(v-min)/range)*(H-padT-padB);
-  const zeroY = metric==='chg' ? Y(0) : null;
+  const zeroY = (metric==='chg'||metric==='in') ? Y(0) : null;
   const linePath = vals.map((v,i)=>(i?"L":"M")+X(i)+" "+Y(v)).join(" ");
   const areaPath = `M${X(0)} ${Y(vals[0])} `+vals.map((v,i)=>`L${X(i)} ${Y(v)}`).join(" ")+` L${X(points.length-1)} ${Y(vals[vals.length-1])} Z`;
   let grid="";for(let g=0;g<=3;g++){const yy=padT+g*(H-padT-padB)/3;grid+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#161f2e"/>`;}
@@ -550,12 +657,29 @@ function historySVG(points, metric){
 }
 function renderHistory(){
   const name = selectedHistory || selectedDetail;
-  const pts = HISTORY.points[name];
-  const hasClose = pts && pts.length && pts[0].c!=null;
-  const metric = hasClose ? 'c' : 'chg';
-  const metricLabel = hasClose ? '收盘价' : '当日涨跌幅%';
-  $('historyChart').innerHTML = historySVG(pts, metric);
-  $('histSrc').textContent = `（${metricLabel} · ${pts?pts.length:0} 个交易日）`;
+  let pts=null, metaLabel='';
+  if(histView.src==='index'){
+    const ih=(REAL.indexHistory||{})[name]||[];
+    pts=ih.map(p=>({d:p.d,c:p.c}));
+    metaLabel='指数收盘价';
+  } else {
+    pts=HISTORY.points[name]||[];
+    metaLabel=(pts[0]&&pts[0].c!=null)?'收盘价':'涨跌幅%';
+  }
+  // 区间过滤：取最近 N 个交易日
+  if(histView.range>0 && pts.length){
+    const ds=pts.map(p=>p.d).sort();
+    const cut=ds[Math.max(0,ds.length-histView.range)];
+    pts=pts.filter(p=>p.d>=cut);
+  }
+  // 指数模式：metric!=收盘价 时由相邻收盘计算涨跌幅
+  if(histView.src==='index' && histView.metric!=='c'){
+    const arr=[]; for(let i=0;i<pts.length;i++){const c=pts[i].c,pc=i?pts[i-1].c:null;arr.push({d:pts[i].d,chg:pc?+((c/pc-1)*100).toFixed(2):0,c});}
+    pts=arr;
+  }
+  $('historyChart').innerHTML = historySVG(pts, histView.metric);
+  const mLabel = histView.metric==='in'?'主力净流入':histView.metric==='c'?'收盘价':'涨跌幅%';
+  $('histSrc').textContent = `（${mLabel} · ${pts?pts.length:0} 个交易日）`;
   $('histMeta').textContent = (pts && pts.length)
     ? `${name}：自 ${pts[0].d} 至 ${pts[pts.length-1].d}（共 ${pts.length} 个交易日）`
     : '暂无历史数据';
@@ -569,7 +693,7 @@ function renderAlloc(){
 }
 
 /* ---------- 启动 ---------- */
-function renderAll(){renderIndices();renderHeat();renderInflow();renderStyles();renderNorth();renderDetailTabs();renderDetail();renderHistory();renderAlloc();}
+function renderAll(){renderIndices();renderHeat();renderInflow();renderStyles();renderNorth();renderDetailTabs();renderDetail();renderHistory();renderAlloc();renderSourceBadges();}
 $('refreshBtn').onclick=refreshLive;
 
 /* 数据加载优先级：同域 data.json → (可选) CDN 镜像 → 内置快照(BACKEND_DATA/REAL) */
@@ -593,6 +717,9 @@ async function fetchJSON(name){
   const dj = await fetchJSON('data.json');   if(dj && dj.sectors) REAL = dj;
   const hj = await fetchJSON('history.json'); if(hj && hj.points) HISTORY = hj;
   renderAll();                 // 显示后端数据（离线为内置真实快照）
+  wireHistoryControls();      // 历史面板：数据源/指标/区间/选天 控件
+  fillHistDates();
+  renderSourceBadges();
   refreshLive();              // 再尝试联网叠加实时数据
   setInterval(refreshLive, 60000);  // 每 60 秒自动刷新实时数据
 })();
