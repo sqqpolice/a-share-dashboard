@@ -399,8 +399,13 @@ def build_data(online=True):
         elif bk:
             print(f"  [note] 板块 {t.get('name')}({bk}) 无资金流数据，跳过 K 线")
 
-    # 诚实标注：只要指数或板块任一项拿到真实数据，即视为 online
-    data["source"] = "online" if (meta["indicesSource"] == "tencent-live" or sectors_ok) else "online-fallback"
+    # 诚实标注数据质量：板块资金流真正抓到才叫 online；否则明确区分
+    if sectors_ok:
+        data["source"] = "online"                       # 指数+板块都真实
+    elif meta["indicesSource"] == "tencent-live":
+        data["source"] = "online-index-only"            # 仅指数真实，板块为示例
+    else:
+        data["source"] = "demo/offline"                 # 全为示例
     data["_flow"] = flow  # 内部字段：供 write_outputs -> update_history 使用，写入前端前会剔除
     return data
 
