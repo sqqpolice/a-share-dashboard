@@ -24,11 +24,15 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # 必须用 GITHUB_TOKEN，否则后续 push 无权限 → exit code 128
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
 
       - name: Install dependencies
         run: pip install requests
@@ -41,12 +45,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 确认远程 URL 含 token（actions/checkout@v4 + persist-credentials 应已自动注入）
+          echo "remote url: $(git remote get-url origin)"
+          echo "current branch: $(git branch --show-current)"
           git add data.json history.json
           # 仅在有实际变更时才提交（避免无数据时空提交）
           git diff --cached --quiet || git commit -m "data: auto-update $(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M')"
-          # 先拉远程最新再推送（防止被拒：远程有其他提交时自动 rebase）
-          git pull --rebase origin main || true
-          git push || git push --force-with-lease
+          # 先拉远程最新再推送
+          git pull --rebase origin main 2>&1 || echo "  [warn] pull rebase failed (may be empty or up-to-date)"
+          git push origin main 2>&1 || {
+            echo "  [warn] normal push failed, retry with force-with-lease..."
+            git push --force-with-lease origin main 2>&1
+          }
 
       - name: Stage deployable files
         run: |
