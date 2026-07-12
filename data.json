@@ -1,48 +1,54 @@
 {
- "date": "2026-07-12",
- "asOf": "2026-07-12 收盘",
+ "date": "2026-07-10",
+ "asOf": "2026-07-10 收盘",
  "indices": [
   {
    "code": "sh000001",
    "name": "上证指数",
    "value": 3996.16,
    "chg": -1.0,
-   "time": "20260710161402"
+   "time": "20260710161402",
+   "date": "2026-07-10"
   },
   {
    "code": "sz399001",
    "name": "深证成指",
    "value": 15046.67,
    "chg": -2.29,
-   "time": "20260710161421"
+   "time": "20260710161421",
+   "date": "2026-07-10"
   },
   {
    "code": "sz399006",
    "name": "创业板指",
    "value": 3842.73,
    "chg": -4.37,
-   "time": "20260710161436"
+   "time": "20260710161436",
+   "date": "2026-07-10"
   },
   {
    "code": "sh000300",
    "name": "沪深300",
    "value": 4780.79,
    "chg": -1.96,
-   "time": "20260710161408"
+   "time": "20260710161408",
+   "date": "2026-07-10"
   },
   {
    "code": "sh000688",
    "name": "科创50",
    "value": 2064.98,
    "chg": -5.53,
-   "time": "20260710161414"
+   "time": "20260710161414",
+   "date": "2026-07-10"
   },
   {
    "code": "bj899050",
    "name": "北证50",
    "value": 1209.15,
    "chg": -0.02,
-   "time": "20260710153730"
+   "time": "20260710153712",
+   "date": "2026-07-10"
   }
  ],
  "sectors": [
@@ -169,10 +175,6 @@
    "hot": 6.0
   }
  ],
- "north": {
-  "monthNet": 520.0,
-  "dayDisclosed": false
- },
  "detailTabs": [
   {
    "name": "半导体",
@@ -260,7 +262,6 @@
   "indicesSource": "tencent-live",
   "sectorsSource": "snapshot",
   "klineSource": "snapshot",
-  "northSource": "snapshot",
   "generatedAt": "2026-07-12 00:00"
  },
  "indexHistory": {

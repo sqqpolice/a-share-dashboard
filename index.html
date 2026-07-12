@@ -26,6 +26,7 @@
   .status .dot{width:7px;height:7px;border-radius:50%}
   .status.live{color:var(--green);border-color:rgba(30,199,125,.4)} .status.live .dot{background:var(--green);box-shadow:0 0 6px var(--green)}
   .status.offline{color:var(--gold);border-color:rgba(240,185,11,.4)} .status.offline .dot{background:var(--gold)}
+  .status.closed{color:var(--gold);border-color:rgba(240,185,11,.4)} .status.closed .dot{background:var(--gold)}
   .status.loading{color:var(--cyan);border-color:rgba(45,212,255,.4)} .status.loading .dot{background:var(--cyan);animation:bl 1s infinite}
   @keyframes bl{50%{opacity:.3}}
   header .meta{display:flex;align-items:center;gap:10px}
@@ -72,11 +73,6 @@
   .sbar .fill{position:absolute;top:1px;bottom:1px;border-radius:5px}
   .rotdir{margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--panel2);border:1px solid var(--border);font-size:12px;display:flex;align-items:center;gap:8px}
   .rotdir .arrow{font-size:16px}
-  .north-head{display:flex;align-items:baseline;gap:12px;margin-bottom:2px}
-  .north-head .big{font-family:var(--mono);font-size:22px;font-weight:700}
-  .north-head .lbl{font-size:12px;color:var(--muted)}
-  .north svg{width:100%;height:auto;display:block}
-  .north .note{font-size:10px;color:var(--muted);margin-top:4px}
   .history .empty{font-size:12px;color:var(--muted);padding:30px 0;text-align:center;line-height:1.7}
   .hist-meta{font-size:11px;color:var(--muted);margin-top:6px;font-family:monospace}
   .detail .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
@@ -160,16 +156,10 @@
 </div>
 
 <div class="grid2">
-  <div class="panel inflow">
-    <h2>主力资金行业净流入排行 <span class="tag">双向条形 · 亿元</span><span class="src-badge" id="badgeFlow"></span></h2>
+  <div class="panel inflow" style="flex:1 1 100%">
+    <h2>主力资金行业净流入排行 <span class="tag">双向条形 · 亿元（当日）</span><span class="src-badge" id="badgeFlow"></span></h2>
     <div id="inflowChart"></div>
     <div class="leg"><span><i style="background:var(--red)"></i>主力净流入</span><span><i style="background:var(--green)"></i>主力净流出</span><span class="muted" id="inflowMeta"></span></div>
-  </div>
-  <div class="panel north">
-    <h2>北向资金动向 <span class="tag">东方财富</span><span class="src-badge" id="badgeNorth"></span></h2>
-    <div class="north-head"><span class="big" id="northToday"></span><span class="lbl" id="northLbl"></span></div>
-    <div id="northChart"></div>
-    <div class="note" id="northNote"></div>
   </div>
 </div>
 
@@ -197,21 +187,21 @@
 
 <div class="row">
   <div class="panel history" style="flex:1 1 100%">
-    <h2>板块历史趋势 <span class="tag" id="histTag">近7日 / 选择某天回看</span></h2>
-    <div class="sub">切换「行业板块 / 指数」数据源，选择指标与区间；在下拉框选某天，可回看<b>当天板块表现</b>（热力网格与资金流同步切换）。指数模式为腾讯真实近 60 日。</div>
+    <h2>板块多日资金流向 <span class="tag" id="histTag">近30日 / 主力净流入 / 选择某天回看</span></h2>
+    <div class="sub">默认聚焦<b>主力净流入</b>（多日资金流动）。切换「行业板块 / 指数」数据源与区间；下拉框选某天可回看<b>当天板块表现</b>（热力网格与资金流同步切换）。行业板块多日资金流向随每日自动抓取累积（GitHub Actions 每个交易日 16:30 运行），累积若干交易日后即可看多日趋势；指数模式为腾讯真实近 60 日走势。</div>
     <div class="hist-ctl">
       <div class="seg" id="histSrcSeg">
         <button data-v="sector" class="active">行业板块</button>
         <button data-v="index">指数</button>
       </div>
       <div class="seg" id="histMetricSeg">
-        <button data-v="chg" class="active">涨跌幅%</button>
-        <button data-v="in">主力净流入</button>
+        <button data-v="chg">涨跌幅%</button>
+        <button data-v="in" class="active">主力净流入</button>
         <button data-v="c">收盘价</button>
       </div>
       <div class="seg" id="histRangeSeg">
-        <button data-v="7" class="active">近7日</button>
-        <button data-v="30">近30日</button>
+        <button data-v="7">近7日</button>
+        <button data-v="30" class="active">近30日</button>
         <button data-v="0">全部</button>
       </div>
       <select id="histDate" class="hsel" title="选择某天回看"></select>
@@ -232,7 +222,7 @@
 </div>
 
 <footer>
-  <div>数据来源：腾讯财经实时行情接口、东方财富行业/概念板块与 K 线公开接口（后端 fetch_a股.py 每日抓取，已服务端计算 MA20/MACD）。北向资金自 2024/8 起监管不再实时披露净买入，本页仅展示可获取的月度累计值。</div>
+  <div>数据来源：腾讯财经实时行情接口（指数及近 60 日历史）、东方财富行业/概念板块与 K 线公开接口（后端 fetch_a股.py 每个交易日 16:30 自动抓取，已服务端计算 MA20/MACD）。多日资金流向随每日抓取自动累积。北向资金自 2024/8 起监管不再实时披露，公开源有限，本页未展示以免误导。</div>
   <div class="disc">⚠ 本仪表盘仅供研究与学习演示，不构成任何投资建议。投资有风险，入市需谨慎。</div>
 </footer>
 
@@ -246,7 +236,7 @@
    板块 bk 为东方财富板块代码（m:90 t:2 行业 / t:3 概念）。
    ===================================================================== */
 let REAL = (window.BACKEND_DATA && window.BACKEND_DATA.sectors) ? window.BACKEND_DATA : {
-  date:"2026-07-11",
+  date:"2026-07-10",
   asOf:"2026-07-10 收盘",
   indices:[
     {code:"sh000001", name:"上证指数", value:3996.16, chg:-1.00},
@@ -282,7 +272,6 @@ let REAL = (window.BACKEND_DATA && window.BACKEND_DATA.sectors) ? window.BACKEND
     {name:"光伏 +2.40%", hot:7.3},
     {name:"半导体 -5.38%", hot:6.0}
   ],
-  north:{ monthNet:520.0, dayDisclosed:false },
   detailTabs:[
     {name:"半导体",   bk:"BK1036"},
     {name:"光伏",     bk:"BK1318"},
@@ -310,13 +299,25 @@ let REAL = (window.BACKEND_DATA && window.BACKEND_DATA.sectors) ? window.BACKEND
   ]
 };
 
-let STATUS={mode:"offline", idxLive:false, secLive:false};
+let STATUS={mode:"offline", idxLive:false, secLive:false, loading:false};
 let selectedSector = REAL.sectors[0].name;
 let selectedDetail = "半导体";
 let HISTORY = {points:{}};    // 历史趋势数据（来自 history.json，每日累积）
 let selectedHistory = selectedDetail;
-let histView = {src:"sector", metric:"chg", range:7, date:null};  // 历史面板视图状态
+let histView = {src:"sector", metric:"in", range:30, date:null};  // 历史面板视图状态（默认：行业板块 / 主力净流入 / 近30日）
 const klineCache = {};
+
+/* ---------- 数据时间诚实化（周末/休市时清楚标注"最近交易日"） ---------- */
+function pad2(n){return (n<10?'0':'')+n;}
+function viewDateStr(){const d=new Date();return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
+function weekdayCN(s){const w=new Date(s+'T00:00:00').getDay();return '日一二三四五六'[w];}
+function dataIsToday(){return viewDateStr()===REAL.date;}     // 数据代表日 == 查看者当天？
+function tradingNow(){                                         // 当前是否 A股交易时段（北京时区粗略判断）
+  const d=new Date();const day=d.getDay();if(day===0||day===6)return false;
+  const t=d.getHours()*60+d.getMinutes();
+  return (t>=570&&t<=690)||(t>=780&&t<=900);                  // 09:30-11:30 / 13:00-15:00
+}
+function ageBadge(){return dataIsToday() ? ('今日收盘 '+REAL.date) : ('休市 · 最新交易日 '+REAL.date+' 收盘');}
 
 /* ---------- 工具 ---------- */
 const $ = id => document.getElementById(id);
@@ -367,7 +368,7 @@ function loadTencent(){
   return new Promise((res,rej)=>{
     const s=document.createElement('script');
     s.src='https://qt.gtimg.cn/q='+codes.join(',');
-    s.onload=()=>{const out=[];codes.forEach(c=>{const raw=window['v_'+c];if(raw){const a=raw.split('~');out.push({code:c,name:a[1],value:parseFloat(a[3]),chg:parseFloat(a[33]),time:a[31]});}});res(out);};
+    s.onload=()=>{const out=[];codes.forEach(c=>{const raw=window['v_'+c];if(raw){const a=raw.split('~');const price=parseFloat(a[3]),prev=parseFloat(a[4]);const chg=prev?+((price/prev-1)*100).toFixed(2):(parseFloat(a[32])||0);out.push({code:c,name:a[1],value:price,chg:chg,time:a[30]||""});}});res(out);};
     s.onerror=rej;
     document.head.appendChild(s);
     setTimeout(()=>rej(new Error('timeout')),9000);
@@ -399,25 +400,29 @@ async function refreshLive(){
     REAL.sectors.forEach(s=>{const m=REAL._byCode[s.bk];if(m){s.chg=m.chg;s.inflow=+m.inflow.toFixed(2);}});
     if(ind.length) STATUS.secLive=true;
   }catch(e){}
-  // 北向
-  try{
-    const d=await jsonp('https://push2.eastmoney.com/api/qt/kamt/get?fields1=f1,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ut=b2884a393a59ad64002292a3e90d46a5');
-    const hk=d.data&&d.data.hk2sh;
-    if(hk){REAL.north.monthNet=+(hk.monthNetAmtIn/10000).toFixed(1);REAL.north.dayDisclosed=(hk.dayNetAmtIn||0)!==0;}
-  }catch(e){}
-  renderIndices();renderHeat();renderInflow();renderStyles();renderNorth();renderDetail();renderSourceBadges();
+  renderIndices();renderHeat();renderInflow();renderStyles();renderDetail();renderSourceBadges();
   setStatus();
 }
-function setStatus(mode){
-  if(mode==='loading'){ STATUS.mode='loading'; }
-  else { STATUS.mode = STATUS.secLive ? 'live' : (STATUS.idxLive ? 'live-idx' : 'offline'); }
+function setStatus(arg){
+  if(arg==='loading'){ STATUS.loading=true; }
+  else { STATUS.loading=false; }
+  let mode;
+  if(STATUS.loading) mode='loading';
+  else if(dataIsToday() && tradingNow()) mode = STATUS.secLive ? 'live' : 'live-idx';
+  else mode='closed';                 // 周末/休市/非交易时段：一律标"休市快照"+最近交易日
+  STATUS.mode=mode;
   const pill=$('statusPill'),txt=$('statusText');
-  pill.className='status '+STATUS.mode;
-  const map={live:['实时','实时行情'],'live-idx':['指数实时','腾讯实时'],loading:['加载中…','加载中…'],offline:['离线快照', REAL.asOf||'真实收盘快照']};
-  const m=map[STATUS.mode];
+  pill.className='status '+mode;
+  const labels={
+    loading:['加载中…','加载中…'],
+    live:['实时','实时行情 '+REAL.date],
+    'live-idx':['指数实时','腾讯实时 '+REAL.date],
+    closed:['休市快照', ageBadge()]
+  };
+  const m=labels[mode];
   txt.textContent=m[0];
   $('asofBadge').textContent=m[1];
-  $('idxTag').textContent = STATUS.secLive?'实时':(STATUS.idxLive?'腾讯实时':'示例数据');
+  $('idxTag').textContent = (mode==='live'||mode==='live-idx') ? (STATUS.secLive?'实时':'腾讯实时') : '最新收盘';
 }
 
 /* ---------- 渲染 ---------- */
@@ -430,7 +435,7 @@ function renderIndices(){
       ${x.time?`<div class="tm">${x.time.slice(4,6)}-${x.time.slice(6,8)} ${x.time.slice(8,10)}:${x.time.slice(10,12)}</div>`:''}
     </div>`).join("");
   $('themes').innerHTML = REAL.themes.map(t=>`<div class="chip"><span class="dot"></span>${t.name}</div>`).join("");
-  $('dateLabel').textContent = REAL.date + (STATUS.mode==='live'?' · 实时':' · 收盘快照');
+  $('dateLabel').textContent = REAL.date + ' 周' + weekdayCN(REAL.date) + (dataIsToday()?'':' · 休市(最近交易日)');
 }
 function renderHeat(){
   const secs=viewSectors();
@@ -492,25 +497,6 @@ function renderStyles(){
   else if(small>large){dir="小盘占优";arrow="↘";desc="小盘风格活跃，主题炒作升温";}
   else {dir="大盘价值占优";arrow="↙";desc="防御与权重占优，市场偏谨慎";}
   $('rotdir').innerHTML=`<span class="arrow">${arrow}</span><div><b>${dir}</b> · <span class="muted">${desc}</span></div>`;
-}
-function renderNorth(){
-  const n=REAL.north;
-  $('northToday').textContent = n.dayDisclosed ? (n.dayNet+' 亿') : '未实时披露';
-  $('northToday').className = 'big ' + (n.dayDisclosed ? (n.dayNet>=0?'up':'down') : 'muted');
-  $('northLbl').textContent = n.dayDisclosed ? '今日北向净买入' : '月度累计净买入';
-  $('northNote').textContent = n.dayDisclosed
-    ? '实时净买入已披露'
-    : `监管自 2024/8 起不再实时披露北向净买入；当前可获取月度累计约 ${n.monthNet} 亿元（示意趋势线）。`;
-  // 示意趋势线（北向历史无法稳定获取）
-  const h=Array.from({length:30},(_,i)=>Math.sin(i/3)*30+(15-i)*1.2);
-  const W=640,H=180,padT=14,padB=22,padL=8,padR=8;
-  const min=Math.min(...h,0),max=Math.max(...h,0),range=(max-min)||1;
-  const X=i=>padL+i*(W-padL-padR)/(h.length-1),Y=v=>padT+(1-(v-min)/range)*(H-padT-padB);
-  const line=h.map((v,i)=>(i?"L":"M")+X(i)+" "+Y(v)).join(" ");
-  const area=`M${X(0)} ${Y(0)} `+h.map((v,i)=>`L${X(i)} ${Y(v)}`).join(" ")+` L${X(h.length-1)} ${Y(0)} Z`;
-  const grid=`<line x1="${padL}" y1="${Y(0)}" x2="${W-padR}" y2="${Y(0)}" stroke="#26354a" stroke-dasharray="3 3"/>`;
-  const grad=`<defs><linearGradient id="ng" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(45,212,255,.35)"/><stop offset="100%" stop-color="rgba(45,212,255,0)"/></linearGradient></defs>`;
-  $('northChart').innerHTML=`<svg viewBox="0 0 ${W} ${H}">${grad}${grid}<path d="${area}" fill="url(#ng)"/><path d="${line}" fill="none" stroke="var(--cyan)" stroke-width="2"/></svg>`;
 }
 function renderDetailTabs(){
   $('detailTabs').innerHTML=REAL.detailTabs.map(t=>`<span class="tab ${t.name===selectedDetail?'active':''}" data-name="${t.name}">${t.name}</span>`).join("");
@@ -576,7 +562,6 @@ function renderSourceBadges(){
   set('badgeIdx',metaSrc('indicesSource'));
   set('badgeSec',metaSrc('sectorsSource'));
   set('badgeFlow',metaSrc('sectorsSource'));
-  set('badgeNorth',metaSrc('northSource'));
   set('badgeKline',metaSrc('klineSource'));
 }
 
@@ -634,7 +619,7 @@ function wireHistoryControls(){
 
 function historySVG(points, metric){
   if(!points || points.length < 2){
-    return '<div class="empty">历史数据不足：行业板块需累积多个交易日（或切换为「指数」查看腾讯真实近 60 日走势）。</div>';
+    return '<div class="empty">行业板块多日数据累积中（当前 '+ (points?points.length:0) +' 个交易日）。<br>每个交易日 16:30 自动抓取一次，累积几天后即可看多日资金流向；<br>想立刻看长周期真实走势，可把数据源切到「指数」（腾讯真实近 60 日）。</div>';
   }
   const valOf = p => metric==='c' ? (p.c!=null?p.c:p.chg)
                   : metric==='in' ? (p.in!=null?p.in:p.chg)
@@ -693,7 +678,7 @@ function renderAlloc(){
 }
 
 /* ---------- 启动 ---------- */
-function renderAll(){renderIndices();renderHeat();renderInflow();renderStyles();renderNorth();renderDetailTabs();renderDetail();renderHistory();renderAlloc();renderSourceBadges();}
+function renderAll(){renderIndices();renderHeat();renderInflow();renderStyles();renderDetailTabs();renderDetail();renderHistory();renderAlloc();renderSourceBadges();}
 $('refreshBtn').onclick=refreshLive;
 
 /* 数据加载优先级：同域 data.json → (可选) CDN 镜像 → 内置快照(BACKEND_DATA/REAL) */
@@ -713,7 +698,7 @@ async function fetchJSON(name){
   return null;
 }
 (async function boot(){
-  setStatus('offline');
+  setStatus();
   const dj = await fetchJSON('data.json');   if(dj && dj.sectors) REAL = dj;
   const hj = await fetchJSON('history.json'); if(hj && hj.points) HISTORY = hj;
   renderAll();                 // 显示后端数据（离线为内置真实快照）

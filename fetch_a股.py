@@ -10,9 +10,9 @@ A股行业轮动与资金流向监控 · 后端数据抓取脚本
   - 指数历史日K(近60日): 腾讯财经 web.ifzq.gtimg.cn      【稳定可用，支撑"指数近一周"真实走势】
   - 行业/概念板块涨跌+主力净流入 : 东方财富 push2.eastmoney.com 【CI 公网通常可用；公司内网/本机常被挡，失败则标 snapshot】
   - 板块 60 日 K 线    : 东方财富 push2his.eastmoney.com 【同上，依赖东方财富】
-  - 北向资金          : 东方财富 kamt（2024/8 起仅披露月度累计，当日净买入不实时）
 说明：免费行情源里，行业板块级的"涨跌幅+主力净流入"只有东方财富能稳定提供；腾讯不提供板块实时报价/板块K线。
-      因此架构上"指数=腾讯真实源"，"行业板块=东方财富(尽力，失败标注示例)"，前端用徽章如实区分。
+      因此架构上"指数=腾讯真实源(含近60日历史)"，"行业板块=东方财富(尽力，失败标注示例)"，前端用徽章如实区分。
+      北向资金面板已移除：监管 2024/8 起不再实时披露当日净买入，可获取信息有限且无稳定公开源，故不再展示以免误导。
 
 运行：
   python fetch_a股.py            # 在线抓取（需联网）
@@ -20,7 +20,7 @@ A股行业轮动与资金流向监控 · 后端数据抓取脚本
   python fetch_a股.py --serve    # 抓取后顺带起一个本地 http 服务（http://localhost:8000）
 
 依赖：requests（pip install requests）。如缺失会给出提示。
-北向当日净买入：监管 2024/8 起不再实时披露，脚本只会拿到月度累计，并标注 dayDisclosed=false。
+北向资金：监管 2024/8 起不再实时披露当日净买入，公开源信息有限，前端面板已移除。
 """
 import os, sys, json, re, datetime, random
 
@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # 作用：① 离线兜底 ② --demo 验证逻辑。在线抓取成功时会被真实数据整体覆盖。
 # ---------------------------------------------------------------------------
 SNAP = {
-  "date": "2026-07-11",
+  "date": "2026-07-10",
   "asOf": "2026-07-10 收盘",
   "indices": [
     {"code": "sh000001", "name": "上证指数", "value": 3996.16, "chg": -1.00},
@@ -67,7 +67,6 @@ SNAP = {
     {"name": "光伏 +2.40%",     "hot": 7.3},
     {"name": "半导体 -5.38%",   "hot": 6.0},
   ],
-  "north": {"monthNet": 520.0, "dayDisclosed": False},
   "detailTabs": [
     {"name": "半导体",   "bk": "BK1036"},
     {"name": "光伏",     "bk": "BK1318"},
@@ -152,7 +151,11 @@ def tencent_indices(codes):
         except Exception:
             continue
         tm = a[30] if len(a) > 30 and a[30].isdigit() else ""
-        out.append({"code": code, "name": a[1], "value": price, "chg": chg, "time": tm})
+        # 从腾讯时间字段(YYYYMMDDHHMMSS)精确取出交易日，解决"周末运行却错标为今天"的问题
+        date_ymd = ""
+        if len(a) > 30 and len(a[30]) >= 8 and a[30][:8].isdigit():
+            date_ymd = f"{a[30][:4]}-{a[30][4:6]}-{a[30][6:8]}"
+        out.append({"code": code, "name": a[1], "value": price, "chg": chg, "time": tm, "date": date_ymd})
     return out
 
 
@@ -188,20 +191,8 @@ def em_kline(secid, lmt=60):
 
 
 def em_north():
-    """北向资金。返回 {monthNet, dayDisclosed}"""
-    s = _session()
-    url = "https://push2.eastmoney.com/api/qt/kamt/get"
-    r = s.get(url, params={
-        "fields1": "f1,f3",
-        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
-        "ut": "b2884a393a59ad64002292a3e90d46a5",
-    }, timeout=12)
-    m = re.search(r"\((.*)\)", r.text, re.S)
-    d = json.loads(m.group(1))
-    hk = (d.get("data") or {}).get("hk2sh") or {}
-    day = float(hk.get("dayNetAmtIn") or 0)
-    month = float(hk.get("monthNetAmtIn") or 0)
-    return {"monthNet": round(month / 1e8, 1), "dayDisclosed": day != 0}  # 元 -> 亿元
+    """北向资金面板已在前端移除，此函数保留仅为向后兼容，不再被调用。"""
+    return {"monthNet": 0.0, "dayDisclosed": False}
 
 
 # ----------------------------- 指标计算 -----------------------------
@@ -247,13 +238,13 @@ def build_data(online=True):
     today = datetime.date.today()
     # meta：如实记录每个模块的数据来源，前端用徽章区分"真实/示例"
     meta = {"indicesSource": "snapshot", "sectorsSource": "snapshot",
-            "klineSource": "snapshot", "northSource": "snapshot",
+            "klineSource": "snapshot",
             "generatedAt": today.strftime("%Y-%m-%d %H:%M")}
     data = {
         "date": today.strftime("%Y-%m-%d"),
         "asOf": today.strftime("%Y-%m-%d") + " 收盘" if online else SNAP["asOf"],
         "indices": SNAP["indices"], "sectors": SNAP["sectors"],
-        "themes": SNAP["themes"], "north": dict(SNAP["north"]),
+        "themes": SNAP["themes"],
         "detailTabs": [dict(t) for t in SNAP["detailTabs"]],
         "alloc": SNAP["alloc"],
         "source": "demo/offline" if not online else "online-attempt",
@@ -290,6 +281,13 @@ def build_data(online=True):
             meta["indicesSource"] = "tencent-live"
     except Exception as e:
         print("  [warn] 指数抓取失败，沿用快照：", e)
+
+    # 用指数返回的真实交易日校准 date / asOf（周末/休市运行也只取最近交易日）
+    if idx:
+        trd = idx[0].get("date")
+        if trd:
+            data["date"] = trd
+            data["asOf"] = trd + " 收盘"
 
     # 2) 指数历史日K：腾讯（真实，立即可用 -> 指数近一周走势）
     try:
@@ -358,13 +356,6 @@ def build_data(online=True):
                     meta["klineSource"] = "eastmoney-live"
             except Exception as e:
                 print(f"  [warn] K线抓取失败 {nm}({bk})：", e)
-
-    # 6) 北向
-    try:
-        data["north"] = em_north()
-        meta["northSource"] = "eastmoney-live"
-    except Exception as e:
-        print("  [warn] 北向抓取失败，沿用快照：", e)
 
     # 诚实标注：只要指数或板块任一项拿到真实数据，即视为 online
     data["source"] = "online" if (meta["indicesSource"] == "tencent-live" or sectors_ok) else "online-fallback"
