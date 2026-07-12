@@ -187,8 +187,8 @@
 
 <div class="row">
   <div class="panel history" style="flex:1 1 100%">
-    <h2>板块多日资金流向 <span class="tag" id="histTag">近30日 / 主力净流入 / 选择某天回看</span></h2>
-    <div class="sub">默认聚焦<b>主力净流入</b>（多日资金流动）。切换「行业板块 / 指数」数据源与区间；下拉框选某天可回看<b>当天板块表现</b>（热力网格与资金流同步切换）。行业板块多日资金流向随每日自动抓取累积（GitHub Actions 每个交易日 16:30 运行），累积若干交易日后即可看多日趋势；指数模式为腾讯真实近 60 日走势。</div>
+    <h2>板块多日资金流向 <span class="tag" id="histTag">近7日 / 主力净流入 / 选择某天回看</span></h2>
+    <div class="sub">默认聚焦<b>主力净流入</b>（多日资金流动），区间默认<b>近7日=这一周</b>。切换「行业板块 / 指数」数据源与区间；下拉框选某天可回看<b>当天板块表现</b>（热力网格与资金流同步切换）。行业板块多日资金流由后端每次运行<b>直接读取近 30 个交易日</b>（GitHub Actions 每个交易日 16:30 运行），无需逐日累积；指数模式为腾讯真实近 60 日走势。</div>
     <div class="hist-ctl">
       <div class="seg" id="histSrcSeg">
         <button data-v="sector" class="active">行业板块</button>
@@ -200,8 +200,8 @@
         <button data-v="c">收盘价</button>
       </div>
       <div class="seg" id="histRangeSeg">
-        <button data-v="7">近7日</button>
-        <button data-v="30" class="active">近30日</button>
+        <button data-v="7" class="active">近7日</button>
+        <button data-v="30">近30日</button>
         <button data-v="0">全部</button>
       </div>
       <select id="histDate" class="hsel" title="选择某天回看"></select>
@@ -302,9 +302,9 @@ let REAL = (window.BACKEND_DATA && window.BACKEND_DATA.sectors) ? window.BACKEND
 let STATUS={mode:"offline", idxLive:false, secLive:false, loading:false};
 let selectedSector = REAL.sectors[0].name;
 let selectedDetail = "半导体";
-let HISTORY = {points:{}};    // 历史趋势数据（来自 history.json，每日累积）
+let HISTORY = {points:{}};    // 历史趋势数据（来自 history.json，后端直接读取近 30 个交易日）
 let selectedHistory = selectedDetail;
-let histView = {src:"sector", metric:"in", range:30, date:null};  // 历史面板视图状态（默认：行业板块 / 主力净流入 / 近30日）
+let histView = {src:"sector", metric:"in", range:7, date:null};  // 历史面板视图状态（默认：行业板块 / 主力净流入 / 近7日=这一周）
 const klineCache = {};
 
 /* ---------- 数据时间诚实化（周末/休市时清楚标注"最近交易日"） ---------- */
@@ -556,9 +556,9 @@ function macdSVG(m){
 /* ---------- 历史趋势 ---------- */
 /* ---------- 数据源徽章 ---------- */
 function metaSrc(k){ return (REAL.meta||{})[k] || 'snapshot'; }
-function badgeText(s){ return ({'tencent-live':'腾讯实时','eastmoney-live':'东方财富实时','snapshot':'示例数据'})[s] || '示例数据'; }
+function badgeText(s){ return ({'tencent-live':'腾讯实时','eastmoney-live':'东方财富实时','eastmoney-flow':'东方财富真实','snapshot':'示例数据'})[s] || '示例数据'; }
 function renderSourceBadges(){
-  const set=(id,src)=>{const el=$(id);if(!el)return;const live=!!(src&&src.endsWith('live'));el.className='src-badge '+(live?'live':'demo');el.textContent=badgeText(src);};
+  const set=(id,src)=>{const el=$(id);if(!el)return;const real=src==='tencent-live'||src==='eastmoney-live'||src==='eastmoney-flow';el.className='src-badge '+(real?'live':'demo');el.textContent=badgeText(src);};
   set('badgeIdx',metaSrc('indicesSource'));
   set('badgeSec',metaSrc('sectorsSource'));
   set('badgeFlow',metaSrc('sectorsSource'));
@@ -619,7 +619,7 @@ function wireHistoryControls(){
 
 function historySVG(points, metric){
   if(!points || points.length < 2){
-    return '<div class="empty">行业板块多日数据累积中（当前 '+ (points?points.length:0) +' 个交易日）。<br>每个交易日 16:30 自动抓取一次，累积几天后即可看多日资金流向；<br>想立刻看长周期真实走势，可把数据源切到「指数」（腾讯真实近 60 日）。</div>';
+    return '<div class="empty">暂无历史数据。<br>后端每次运行直接读取近 30 个交易日的主力资金流，正常应有 30 个交易日数据点；<br>若为空，说明本次东方财富接口未取到板块数据（已诚实回退快照），可把数据源切到「指数」看腾讯真实近 60 日。</div>';
   }
   const valOf = p => metric==='c' ? (p.c!=null?p.c:p.chg)
                   : metric==='in' ? (p.in!=null?p.in:p.chg)
