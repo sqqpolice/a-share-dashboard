@@ -394,12 +394,23 @@ function loadKline(bk){
 
 async function refreshLive(){
   setStatus('loading');
-  // 指数（腾讯实时）
+  // 1) 拉取 GitHub Actions 服务端最新快照（板块资金流由 Actions 每30分钟盘中抓取，东方财富对云端放行）
+  try{
+    const dj = await fetchJSON('data.json');
+    if(dj && dj.sectors && (dj.source||'').startsWith('online') && dj.asOf !== REAL.asOf){
+      const hj = await fetchJSON('history.json');
+      REAL = Object.assign({}, dj);          // 用服务端真实快照覆盖板块/主题/明细
+      if(hj &&hj.points) HISTORY = hj;        // 历史趋势同步刷新
+      STATUS.secLive = true;
+      renderDataBanner();
+    }
+  }catch(e){}
+  // 2) 指数（腾讯实时，浏览器直连，不受公司网络影响）
   try{
     const idx=await loadTencent();
     if(idx&&idx.length){REAL.indices=idx;STATUS.idxLive=true;}
   }catch(e){}
-  // 行业 + 概念板块（东方财富；公司内网/本机常被挡，失败时保持快照）
+  // 3) 行业 + 概念板块（浏览器直连东方财富；公司网络通常挡，失败则保持 Actions 快照）
   try{
     const [ind,con]=await Promise.all([eastList('m:90+t:2',496),eastList('m:90+t:3',498)]);
     REAL._byCode={};REAL._byName={};
@@ -410,7 +421,7 @@ async function refreshLive(){
     REAL.sectors.forEach(s=>{const m=REAL._byCode[s.bk];if(m){s.chg=m.chg;s.inflow=+m.inflow.toFixed(2);}});
     if(ind.length) STATUS.secLive=true;
   }catch(e){}
-  renderIndices();renderHeat();renderInflow();renderStyles();renderDetail();renderSourceBadges();
+  renderIndices();renderHeat();renderInflow();renderStyles();renderDetail();renderHistory();renderSourceBadges();
   setStatus();
 }
 function setStatus(arg){
